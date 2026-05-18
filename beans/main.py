@@ -86,17 +86,16 @@ def main():
 
             if right_lm is not None:
                 w, h = config.WINDOW_SIZE
+                thumb_px = (int(right_lm[4, 0] * w), int((1 - right_lm[4, 1]) * h))
                 index_px = (int(right_lm[8, 0] * w), int((1 - right_lm[8, 1]) * h))
-                wrist_px = (int(right_lm[0, 0] * w), int((1 - right_lm[0, 1]) * h))
                 pinch_dist = _pinch_distance(right_lm)
                 is_pinching = pinch_dist < config.PINCH_ACTIVATE
                 new_vol = volume_ctrl.update(is_pinching, pinch_dist)
-                # Line is always visible while the right hand is present;
-                # volume level updates only when pinching.
                 cur_vol = new_vol if new_vol is not None else volume_ctrl._volume
-                renderer.set_volume_display(cur_vol, index_px, wrist_px)
+                renderer.set_volume_display(cur_vol)
+                renderer.set_pinch_gap(thumb_px, index_px, is_pinching)
             else:
-                renderer.tick_volume_fade()
+                renderer.clear_pinch_gap()
             t = time.monotonic() - t_start
 
             # Upload camera frame to GPU texture

@@ -57,3 +57,7 @@ VOL_FADE_RATE = 1 / 120   # 2-second fade at 60fps
 VOL_LINE_GLOW_COLOR = (0, 210, 60, 90)      # outer glow
 VOL_LINE_CORE_COLOR = (60, 255, 100, 240)   # bright core
 VOL_LABEL_COLOR     = (100, 255, 140, 240)  # "NN%" text
+
+# Pinch gap line (thumb tip ↔ index tip) — 0-255 RGBA for pyglet
+PINCH_GAP_OPEN_COLOR   = (200, 200, 200, 160)  # not pinching
+PINCH_GAP_ACTIVE_COLOR = (255, 220, 60, 230)   # pinching — bright yellow

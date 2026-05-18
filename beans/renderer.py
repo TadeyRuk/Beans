@@ -176,6 +176,11 @@ def _sort_tris_back_to_front(ndc: np.ndarray) -> list[tuple]:
     )
 
 
+def _px_to_ndc(px: tuple[int, int], w: int, h: int) -> tuple[float, float]:
+    """Convert pixel coords (origin bottom-left, as pyglet uses) to NDC [-1,1]."""
+    return (px[0] / w * 2.0 - 1.0, px[1] / h * 2.0 - 1.0)
+
+
 # ---------------------------------------------------------------------------
 # Renderer
 # ---------------------------------------------------------------------------
@@ -220,6 +225,17 @@ class WireframeRenderer:
         self._pt_vbo = ctx.buffer(reserve=nh * 21 * 3 * 4)
         self._pt_vao = ctx.vertex_array(self._point_prog, [(self._pt_vbo, "3f", "in_pos")])
 
+        # Small reusable VBO for 2-point overlay lines (pinch gap, vol line)
+        self._overlay_line_vbo = ctx.buffer(reserve=2 * 3 * 4)
+        self._overlay_line_vao = ctx.vertex_array(
+            self._line_prog, [(self._overlay_line_vbo, "3f", "in_pos")]
+        )
+        # Small reusable VBO for single overlay points
+        self._overlay_pt_vbo = ctx.buffer(reserve=2 * 3 * 4)
+        self._overlay_pt_vao = ctx.vertex_array(
+            self._point_prog, [(self._overlay_pt_vbo, "3f", "in_pos")]
+        )
+
         self._resolution = (float(w), float(h))
 
         # EMA smoothing cache
@@ -227,10 +243,9 @@ class WireframeRenderer:
 
         self._label: object = None
         self._vol_level: int = 0
-        self._vol_alpha: float = 0.0
-        self._vol_fading: bool = False
-        self._vol_a_px: tuple[int, int] | None = None  # index tip
-        self._vol_b_px: tuple[int, int] | None = None  # wrist
+        self._pinch_thumb_px: tuple[int, int] | None = None
+        self._pinch_index_px: tuple[int, int] | None = None
+        self._pinch_active: bool = False
         self._search_label: object = None
         self._fps_label: object = None
         self._vol_label: object = None
@@ -360,7 +375,6 @@ class WireframeRenderer:
             self._pulse_vao.render(moderngl.TRIANGLE_STRIP)
             self._draw_search_label()
             self._draw_fps(fps)
-            self._draw_volume_bar()
             return
 
         n_pts, n_edges, n_faces = self._write_hand_data(hands)
@@ -390,6 +404,7 @@ class WireframeRenderer:
 
         self._draw_gesture_label(gestures)
         self._draw_fps(fps)
+        self._draw_pinch_gap()
         self._draw_volume_bar()
 
     def _draw_gesture_label(self, gestures: list[str]):
@@ -409,63 +424,70 @@ class WireframeRenderer:
             self._fps_label.text = f"{fps:.0f} fps"
             self._fps_label.draw()
 
-    def set_volume_display(
-        self,
-        level: int,
-        a_px: tuple[int, int] | None = None,
-        b_px: tuple[int, int] | None = None,
-    ) -> None:
+    def set_volume_display(self, level: int) -> None:
         self._vol_level = level
-        self._vol_alpha = 1.0
-        self._vol_fading = False
-        self._vol_a_px = a_px
-        self._vol_b_px = b_px
 
-    def tick_volume_fade(self) -> None:
-        if self._vol_alpha <= 0.0:
+    def set_pinch_gap(
+        self,
+        thumb_px: tuple[int, int],
+        index_px: tuple[int, int],
+        active: bool,
+    ) -> None:
+        self._pinch_thumb_px = thumb_px
+        self._pinch_index_px = index_px
+        self._pinch_active = active
+
+    def clear_pinch_gap(self) -> None:
+        self._pinch_thumb_px = None
+        self._pinch_index_px = None
+        self._pinch_active = False
+
+    def _overlay_line(self, a_px, b_px, color_01: tuple, thickness: float) -> None:
+        """Draw a single line between two pixel-coord points using the hand line shader."""
+        w, h = config.WINDOW_SIZE
+        ax, ay = _px_to_ndc(a_px, w, h)
+        bx, by = _px_to_ndc(b_px, w, h)
+        verts = np.array([[ax, ay, 0.0], [bx, by, 0.0]], dtype=np.float32)
+        self._overlay_line_vbo.write(verts.tobytes())
+        rx, ry = self._resolution
+        self._line_prog["u_resolution"] = (rx, ry)
+        self._line_prog["u_depth_scale"] = 0.0
+        self._line_prog["u_thickness"] = thickness
+        self._line_prog["u_color"] = color_01
+        self._overlay_line_vao.render(moderngl.LINES, vertices=2)
+
+    def _overlay_dots(self, *px_coords, color_01: tuple, size: float) -> None:
+        """Draw dots at the given pixel-coord positions using the point shader."""
+        w, h = config.WINDOW_SIZE
+        verts = np.array(
+            [[*_px_to_ndc(p, w, h), 0.0] for p in px_coords], dtype=np.float32
+        )
+        self._overlay_pt_vbo.write(verts.tobytes())
+        self._point_prog["u_depth_scale"] = 0.0
+        self._point_prog["u_point_size"] = size
+        self._point_prog["u_color"] = color_01
+        self._overlay_pt_vao.render(moderngl.POINTS, vertices=len(px_coords))
+
+    def _draw_pinch_gap(self) -> None:
+        if self._pinch_thumb_px is None or self._pinch_index_px is None:
             return
-        if not self._vol_fading:
-            self._vol_fading = True
-        self._vol_alpha = max(0.0, self._vol_alpha - config.VOL_FADE_RATE)
+        if self._pinch_active:
+            c = tuple(v / 255.0 for v in config.PINCH_GAP_ACTIVE_COLOR)
+        else:
+            c = tuple(v / 255.0 for v in config.PINCH_GAP_OPEN_COLOR)
+        self._overlay_line(self._pinch_thumb_px, self._pinch_index_px, c, thickness=2.5)
+        self._overlay_dots(self._pinch_thumb_px, self._pinch_index_px, color_01=c, size=10.0)
 
     def _draw_volume_bar(self) -> None:
-        if self._vol_alpha <= 0.0:
+        # Show volume % label near the pinch gap midpoint when hand is visible
+        if self._vol_label is None:
             return
-        if self._vol_a_px is None or self._vol_b_px is None:
+        if self._pinch_thumb_px is None or self._pinch_index_px is None:
             return
-        try:
-            import pyglet.shapes
-            import pyglet.text
-        except ImportError:
-            return
-
-        a = self._vol_alpha
-        ax, ay = self._vol_a_px  # index tip
-        bx, by = self._vol_b_px  # wrist
-        mx = (ax + bx) // 2
-        my = (ay + by) // 2
-
-        def _fade(rgba):
-            return (*rgba[:3], int(rgba[3] * a))
-
-        # Glow layer (thick, translucent)
-        glow = pyglet.shapes.Line(
-            ax, ay, bx, by, thickness=8,
-            color=_fade(config.VOL_LINE_GLOW_COLOR),
-        )
-        glow.draw()
-
-        # Bright core
-        core = pyglet.shapes.Line(
-            ax, ay, bx, by, thickness=3,
-            color=_fade(config.VOL_LINE_CORE_COLOR),
-        )
-        core.draw()
-
-        # Percentage label at midpoint
-        if self._vol_label is not None:
-            self._vol_label.text = f"{self._vol_level}%"
-            self._vol_label.x = mx + 14
-            self._vol_label.y = my
-            self._vol_label.color = _fade(config.VOL_LABEL_COLOR)
-            self._vol_label.draw()
+        tx, ty = self._pinch_thumb_px
+        ix, iy = self._pinch_index_px
+        self._vol_label.text = f"{self._vol_level}%"
+        self._vol_label.x = (tx + ix) // 2 + 14
+        self._vol_label.y = (ty + iy) // 2
+        self._vol_label.color = config.VOL_LABEL_COLOR
+        self._vol_label.draw()
