@@ -245,7 +245,6 @@ class WireframeRenderer:
         self._vol_level: int = 0
         self._pinch_thumb_px: tuple[int, int] | None = None
         self._pinch_index_px: tuple[int, int] | None = None
-        self._pinch_active: bool = False
         self._search_label: object = None
         self._fps_label: object = None
         self._vol_label: object = None
@@ -427,20 +426,13 @@ class WireframeRenderer:
     def set_volume_display(self, level: int) -> None:
         self._vol_level = level
 
-    def set_pinch_gap(
-        self,
-        thumb_px: tuple[int, int],
-        index_px: tuple[int, int],
-        active: bool,
-    ) -> None:
+    def set_pinch_gap(self, thumb_px: tuple[int, int], index_px: tuple[int, int], **_) -> None:
         self._pinch_thumb_px = thumb_px
         self._pinch_index_px = index_px
-        self._pinch_active = active
 
     def clear_pinch_gap(self) -> None:
         self._pinch_thumb_px = None
         self._pinch_index_px = None
-        self._pinch_active = False
 
     def _overlay_line(self, a_px, b_px, color_01: tuple, thickness: float) -> None:
         """Draw a single line between two pixel-coord points using the hand line shader."""
@@ -471,10 +463,7 @@ class WireframeRenderer:
     def _draw_pinch_gap(self) -> None:
         if self._pinch_thumb_px is None or self._pinch_index_px is None:
             return
-        if self._pinch_active:
-            c = tuple(v / 255.0 for v in config.PINCH_GAP_ACTIVE_COLOR)
-        else:
-            c = tuple(v / 255.0 for v in config.PINCH_GAP_OPEN_COLOR)
+        c = tuple(v / 255.0 for v in config.PINCH_GAP_ACTIVE_COLOR)
         self._overlay_line(self._pinch_thumb_px, self._pinch_index_px, c, thickness=2.5)
         self._overlay_dots(self._pinch_thumb_px, self._pinch_index_px, color_01=c, size=10.0)
 

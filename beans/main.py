@@ -16,7 +16,7 @@ from beans import config
 from beans import window as win_mod
 from beans.tracker import CaptureLoop, LatestFrame
 from beans.gesture import classify, _pinch_distance
-from beans.volume import PinchVolumeController
+from beans.volume import get_volume, set_volume
 from beans.renderer import WireframeRenderer
 
 
@@ -44,7 +44,6 @@ def main():
 
     ctx = moderngl.create_context()
     renderer = WireframeRenderer(ctx)
-    volume_ctrl = PinchVolumeController()
 
     def _on_key(win, key, _scancode, action, _mods):
         if key == glfw.KEY_ESCAPE and action == glfw.PRESS:
@@ -88,12 +87,12 @@ def main():
                 w, h = config.WINDOW_SIZE
                 thumb_px = (int(right_lm[4, 0] * w), int((1 - right_lm[4, 1]) * h))
                 index_px = (int(right_lm[8, 0] * w), int((1 - right_lm[8, 1]) * h))
-                pinch_dist = _pinch_distance(right_lm)
-                is_pinching = pinch_dist < config.PINCH_ACTIVATE
-                new_vol = volume_ctrl.update(is_pinching, pinch_dist)
-                cur_vol = new_vol if new_vol is not None else volume_ctrl._volume
-                renderer.set_volume_display(cur_vol)
-                renderer.set_pinch_gap(thumb_px, index_px, is_pinching)
+                gap = _pinch_distance(right_lm)
+                # Map gap [0, PINCH_MAX_GAP] directly to volume 0–100
+                vol = int(min(gap / config.PINCH_MAX_GAP, 1.0) * 100)
+                set_volume(vol)
+                renderer.set_volume_display(vol)
+                renderer.set_pinch_gap(thumb_px, index_px, is_active=False)
             else:
                 renderer.clear_pinch_gap()
             t = time.monotonic() - t_start

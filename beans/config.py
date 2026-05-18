@@ -49,9 +49,7 @@ WAKE_WORD_PATH = "beans/assets/hey-beans.ppn"
 PORCUPINE_KEY_ENV = "PORCUPINE_KEY"
 WAKE_WORD_ENABLED = False  # v1.1
 
-PINCH_SENSITIVITY = 150   # delta multiplier for medium responsiveness
-PINCH_ACTIVATE = 0.60     # normalized thumb-to-index distance below which we engage
-VOL_FADE_RATE = 1 / 120   # 2-second fade at 60fps
+PINCH_MAX_GAP = 0.70      # normalized thumb-to-index distance that maps to 100% volume
 
 # Volume gesture line (index tip → wrist) — 0-255 RGBA for pyglet
 VOL_LINE_GLOW_COLOR = (0, 210, 60, 90)      # outer glow
