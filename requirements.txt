@@ -1,0 +1,9 @@
+mediapipe>=0.10
+opencv-python>=4.9
+moderngl>=5.10
+glfw>=2.7
+pyglet>=2.0
+# v1.1 wake word deps — install after: sudo dnf install portaudio-devel
+# pvporcupine>=3.0
+# pyaudio>=0.2.13
+numpy>=1.26
