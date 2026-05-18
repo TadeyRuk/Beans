@@ -55,6 +55,7 @@ def main():
     t_start = time.monotonic()
     frame_times: deque[float] = deque(maxlen=30)
     last_frame_time = time.monotonic()
+    dbg_n = [0]
 
     # TODO(v1.1): wake-word integration
     # if config.WAKE_WORD_ENABLED:
@@ -72,14 +73,28 @@ def main():
 
             hands, handedness, rgb_frame = frame_slot.get()
             gestures = [classify(h) for h in hands]
-            right_lm = next((lm for lm, h in zip(hands, handedness) if h == "Right"), None)
+            # Frame is horizontally flipped (selfie view), so MediaPipe labels
+            # the physical right hand as "Left" in the mirrored image.
+            right_lm = next((lm for lm, h in zip(hands, handedness) if h == "Left"), None)
+
+            dbg_n[0] += 1
+            if dbg_n[0] % 30 == 0:
+                print(f"[dbg] handedness={handedness}  right_lm={'YES' if right_lm is not None else 'NO'}", file=sys.stderr)
+                if right_lm is not None:
+                    pd = _pinch_distance(right_lm)
+                    print(f"[dbg]   pinch_dist={pd:.3f}  PINCH_ACTIVATE={config.PINCH_ACTIVATE}  is_pinching={pd < config.PINCH_ACTIVATE}", file=sys.stderr)
+
             if right_lm is not None:
-                is_pinching = classify(right_lm) == "pinch"
-                new_vol = volume_ctrl.update(is_pinching, _pinch_distance(right_lm))
-                if new_vol is not None:
-                    renderer.set_volume_display(new_vol)
-                else:
-                    renderer.tick_volume_fade()
+                w, h = config.WINDOW_SIZE
+                index_px = (int(right_lm[8, 0] * w), int((1 - right_lm[8, 1]) * h))
+                wrist_px = (int(right_lm[0, 0] * w), int((1 - right_lm[0, 1]) * h))
+                pinch_dist = _pinch_distance(right_lm)
+                is_pinching = pinch_dist < config.PINCH_ACTIVATE
+                new_vol = volume_ctrl.update(is_pinching, pinch_dist)
+                # Line is always visible while the right hand is present;
+                # volume level updates only when pinching.
+                cur_vol = new_vol if new_vol is not None else volume_ctrl._volume
+                renderer.set_volume_display(cur_vol, index_px, wrist_px)
             else:
                 renderer.tick_volume_fade()
             t = time.monotonic() - t_start

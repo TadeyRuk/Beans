@@ -229,8 +229,11 @@ class WireframeRenderer:
         self._vol_level: int = 0
         self._vol_alpha: float = 0.0
         self._vol_fading: bool = False
+        self._vol_a_px: tuple[int, int] | None = None  # index tip
+        self._vol_b_px: tuple[int, int] | None = None  # wrist
         self._search_label: object = None
         self._fps_label: object = None
+        self._vol_label: object = None
         self._init_labels()
 
     def _init_labels(self):
@@ -269,6 +272,17 @@ class WireframeRenderer:
                     anchor_y="center",
                     color=(220, 255, 255, 200),
                 )
+            self._vol_label = pyglet.text.Label(
+                "",
+                font_name="monospace",
+                font_size=14,
+                bold=True,
+                x=0,
+                y=0,
+                anchor_x="left",
+                anchor_y="center",
+                color=config.VOL_LABEL_COLOR,
+            )
         except Exception:
             pass
 
@@ -395,10 +409,17 @@ class WireframeRenderer:
             self._fps_label.text = f"{fps:.0f} fps"
             self._fps_label.draw()
 
-    def set_volume_display(self, level: int) -> None:
+    def set_volume_display(
+        self,
+        level: int,
+        a_px: tuple[int, int] | None = None,
+        b_px: tuple[int, int] | None = None,
+    ) -> None:
         self._vol_level = level
         self._vol_alpha = 1.0
         self._vol_fading = False
+        self._vol_a_px = a_px
+        self._vol_b_px = b_px
 
     def tick_volume_fade(self) -> None:
         if self._vol_alpha <= 0.0:
@@ -410,50 +431,41 @@ class WireframeRenderer:
     def _draw_volume_bar(self) -> None:
         if self._vol_alpha <= 0.0:
             return
+        if self._vol_a_px is None or self._vol_b_px is None:
+            return
         try:
             import pyglet.shapes
             import pyglet.text
         except ImportError:
             return
 
-        w, h = config.WINDOW_SIZE
-        bar_w = 12
-        pad_x = 10
-        pad_y = 30
-        bar_h = h - pad_y * 2
-        bar_x = w - pad_x - bar_w
-        bar_y = pad_y
-
         a = self._vol_alpha
+        ax, ay = self._vol_a_px  # index tip
+        bx, by = self._vol_b_px  # wrist
+        mx = (ax + bx) // 2
+        my = (ay + by) // 2
 
-        # Background track
-        bg = pyglet.shapes.Rectangle(
-            bar_x, bar_y, bar_w, bar_h,
-            color=(20, 20, 30, int(120 * a)),
+        def _fade(rgba):
+            return (*rgba[:3], int(rgba[3] * a))
+
+        # Glow layer (thick, translucent)
+        glow = pyglet.shapes.Line(
+            ax, ay, bx, by, thickness=8,
+            color=_fade(config.VOL_LINE_GLOW_COLOR),
         )
-        bg.draw()
+        glow.draw()
 
-        # Fill
-        fill_h = int(bar_h * self._vol_level / 100)
-        if fill_h > 0:
-            fill = pyglet.shapes.Rectangle(
-                bar_x, bar_y, bar_w, fill_h,
-                color=(0, 180, 210, int(220 * a)),
-            )
-            fill.draw()
+        # Bright core
+        core = pyglet.shapes.Line(
+            ax, ay, bx, by, thickness=3,
+            color=_fade(config.VOL_LINE_CORE_COLOR),
+        )
+        core.draw()
 
-        # Percentage label above bar
-        try:
-            lbl = pyglet.text.Label(
-                f"{self._vol_level}%",
-                font_name="monospace",
-                font_size=11,
-                x=bar_x + bar_w // 2,
-                y=bar_y + bar_h + 12,
-                anchor_x="center",
-                anchor_y="center",
-                color=(220, 255, 255, int(220 * a)),
-            )
-            lbl.draw()
-        except Exception:
-            pass
+        # Percentage label at midpoint
+        if self._vol_label is not None:
+            self._vol_label.text = f"{self._vol_level}%"
+            self._vol_label.x = mx + 14
+            self._vol_label.y = my
+            self._vol_label.color = _fade(config.VOL_LABEL_COLOR)
+            self._vol_label.draw()

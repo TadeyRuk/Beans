@@ -50,4 +50,10 @@ PORCUPINE_KEY_ENV = "PORCUPINE_KEY"
 WAKE_WORD_ENABLED = False  # v1.1
 
 PINCH_SENSITIVITY = 150   # delta multiplier for medium responsiveness
+PINCH_ACTIVATE = 0.60     # normalized thumb-to-index distance below which we engage
 VOL_FADE_RATE = 1 / 120   # 2-second fade at 60fps
+
+# Volume gesture line (index tip → wrist) — 0-255 RGBA for pyglet
+VOL_LINE_GLOW_COLOR = (0, 210, 60, 90)      # outer glow
+VOL_LINE_CORE_COLOR = (60, 255, 100, 240)   # bright core
+VOL_LABEL_COLOR     = (100, 255, 140, 240)  # "NN%" text
