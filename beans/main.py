@@ -54,7 +54,6 @@ def main():
     t_start = time.monotonic()
     frame_times: deque[float] = deque(maxlen=30)
     last_frame_time = time.monotonic()
-    dbg_n = [0]
 
     # TODO(v1.1): wake-word integration
     # if config.WAKE_WORD_ENABLED:
@@ -75,13 +74,6 @@ def main():
             # Frame is horizontally flipped (selfie view), so MediaPipe labels
             # the physical right hand as "Left" in the mirrored image.
             right_lm = next((lm for lm, h in zip(hands, handedness) if h == "Left"), None)
-
-            dbg_n[0] += 1
-            if dbg_n[0] % 30 == 0:
-                print(f"[dbg] handedness={handedness}  right_lm={'YES' if right_lm is not None else 'NO'}", file=sys.stderr)
-                if right_lm is not None:
-                    pd = _pinch_distance(right_lm)
-                    print(f"[dbg]   pinch_dist={pd:.3f}  PINCH_ACTIVATE={config.PINCH_ACTIVATE}  is_pinching={pd < config.PINCH_ACTIVATE}", file=sys.stderr)
 
             if right_lm is not None:
                 w, h = config.WINDOW_SIZE
